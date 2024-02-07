@@ -6,6 +6,7 @@ app = Flask(__name__)
 @app.route('/github-webhook', methods=['POST'])
 def github_webhook():
     github_event = request.headers.get('X-GitHub-Event')
+
     github_payload = request.json
 
     # Extrair informações relevantes do payload do GitHub
@@ -17,6 +18,7 @@ def github_webhook():
     commit_url = github_payload['head_commit']['url']
     author_name = github_payload['sender']['login']
     author_avatar_url = github_payload['sender']['avatar_url']
+    author_url = github_payload['sender']['html_url']
     commit_changes = {
         'Arquivos adicionados': github_payload['head_commit']['added'],
         'Arquivos alterados': github_payload['head_commit']['modified'],
@@ -31,16 +33,28 @@ def github_webhook():
     )
     embed.set_author(
         name=f'{commit_author} - @{author_name}',
-        icon_url=author_avatar_url
+        icon_url=author_avatar_url,
+        url=author_url
     )
 
-    embed.set_footer(text=f'{commit_id}')
+    embed.set_footer(text=f'Commit ➡️ {commit_id}')
+    embed.set_timestamp()
 
     # Adicionar campos para as alterações
     for tipo, arquivos in commit_changes.items():
         if arquivos:
+
+            if tipo == 'Arquivos adicionados':
+                color = '32'
+            elif tipo == 'Arquivos alterados':
+                color = '33'
+            else:
+                color = '31'
+
             arquivos_str = '\n'.join(arquivos)
-            embed.add_embed_field(name=tipo, value=arquivos_str, inline=True)
+
+            valueText = f"```ansi\n\u001b[0;{color}m{arquivos_str}\n```"
+            embed.add_embed_field(name=tipo, value=valueText, inline=False)
 
     embed.url = commit_url
 
