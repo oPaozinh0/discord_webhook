@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from discord_webhook import DiscordWebhook, DiscordEmbed
+import requests
 
 app = Flask(__name__)
 
@@ -9,62 +10,195 @@ def github_webhook():
 
     github_payload = request.json
 
-    # Extrair informações relevantes do payload do GitHub
-    repository_name = github_payload['repository']['full_name']
-    branch_name = github_payload['ref'].split('refs/heads/')[-1]
-    commit_author = github_payload['head_commit']['author']['name']
-    commit_message = github_payload['head_commit']['message']
-    commit_id = github_payload['head_commit']['id']
-    commit_url = github_payload['head_commit']['url']
-    author_name = github_payload['sender']['login']
-    author_avatar_url = github_payload['sender']['avatar_url']
-    author_url = github_payload['sender']['html_url']
-    commit_changes = {
-        'Arquivos adicionados': github_payload['head_commit']['added'],
-        'Arquivos alterados': github_payload['head_commit']['modified'],
-        'Arquivos excluídos': github_payload['head_commit']['removed']
-    }
+    webhook_url = 'https://discord.com/api/webhooks/1196531971782868995/I3b2Zfzn_wW9W9TUfQVdJmKtaqb3FSfBrPRw7BzreOYMWwjZqaDV1-iUhzY_99AeuHt-'
 
+
+    if github_event == 'ping':
+        return jsonify({'message': 'Pong!'}), 200
+    
+    elif github_event == 'push':
     # Criar o embed para o Discord
-    embed = DiscordEmbed(
-        title=f'{repository_name} - {branch_name}',
-        description=commit_message,
-        color='9900ff'
-    )
-    embed.set_author(
-        name=f'{commit_author} - @{author_name}',
-        icon_url=author_avatar_url,
-        url=author_url
-    )
+        # Extrair informações relevantes do payload do GitHub
+        repository_name = github_payload['repository']['full_name']
+        print(repository_name)
+        branch_name = github_payload['ref'].split('refs/heads/')[-1]
+        author_name = github_payload['head_commit']['author']['name']
+        author_user = github_payload['sender']['login']
+        author_avatar_url = github_payload['sender']['avatar_url']
+        author_url = github_payload['sender']['html_url']
+        branch_url = github_payload['repository']['html_url'] + '/commits/' + branch_name
 
-    embed.set_footer(text=f'Commit ➡️ {commit_id}')
+        embed = DiscordEmbed(
+            title=f'⬆️ PUSH:\n{branch_name}',
+            url=branch_url,
+            description=f'[{repository_name}]({github_payload["repository"]["html_url"]})',
+            color='9900ff'
+        )
+        embed.set_author(
+            name=f'{author_name} - @{author_user}',
+            icon_url=author_avatar_url,
+            url=author_url
+        )
+        # Adicionar campos para os commits
+        for commit in github_payload['commits']:
+            # Adicionar o campo para os arquivos deste commit
+            commit_message = commit['message']
+            commit_id = commit['id'][:7]  # Pegar apenas os primeiros 7 caracteres do commit_id
+            commit_url = commit['url']
+            commit_changes = {
+                'Arquivos adicionados': commit['added'],
+                'Arquivos alterados': commit['modified'],
+                'Arquivos excluídos': commit['removed']
+            }
+
+            # Inicialize uma lista para armazenar os campos divididos
+            divided_fields = []
+
+            # Inicialize uma variável para armazenar o texto atual acumulado
+            current_text = ""
+
+            # Itere sobre os tipos de alterações e os arquivos correspondentes
+            for change_type, files in commit_changes.items():
+                for file in files:
+                    # Construa a linha de texto para o arquivo atual
+                    if change_type == 'Arquivos adicionados':
+                        line = f"\u001b[0;32m+ {file}\n"
+                    elif change_type == 'Arquivos alterados':
+                        line = f"\u001b[0;33m  {file}\n"
+                    elif change_type == 'Arquivos excluídos':
+                        line = f"\u001b[0;31m- {file}\n"
+
+                    # Verifique se a adição da linha excederá o limite de caracteres
+                    if len(current_text) + len(line) > 800:
+                        # Se sim, adicione o campo atual à lista de campos divididos
+                        divided_fields.append(current_text)
+                        # Reinicie o texto atual com a linha atual
+                        current_text = line
+                    else:
+                        # Se não, adicione a linha ao texto atual
+                        current_text += line
+
+            # Adicione o texto restante ao último campo dividido
+            divided_fields.append(current_text)
+
+            # Adicione cada campo dividido como um novo campo no embed
+            for index, text in enumerate(divided_fields):
+                # Adicione o campo ao embed
+                embed.add_embed_field(name=f"Commit ➡️ {commit_message} (Parte {index+1})", value=f'[`{commit_id}`]({commit_url})\n```ansi\n{text}```', inline=False)
+
+
+    elif github_event == 'create':
+        # Adicionar campo para a criação do branch
+        repository_name = github_payload['repository']['full_name']
+        branch_name = github_payload['ref']
+        branch_url = github_payload['repository']['html_url'] + '/tree/' + branch_name
+
+        author_api_url = github_payload['sender']['url']
+        author_data = requests.get(author_api_url).json()
+        author_name = author_data['name']
+        author_user = github_payload['sender']['login']
+        author_avatar_url = github_payload['sender']['avatar_url']
+        author_url = github_payload['sender']['html_url']
+
+        embed = DiscordEmbed(
+            title=f'🆕 {repository_name}',
+            url=branch_url,
+            color='9900ff'
+        )
+        embed.set_author(
+            name=f"{author_name} - @{author_user}",
+            icon_url=author_avatar_url,
+            url=author_url
+        )
+
+        embed.add_embed_field(name=branch_name, value="```ansi\n✅ \u001b[0;35mNova branch criada com sucesso!\n```", inline=False)
+
+        print(embed)
+        exit()
+
+    elif github_event == 'delete':
+        # Adicionar campo para a criação do branch
+        repository_name = github_payload['repository']['full_name']
+        branch_name = github_payload['ref']
+        branch_url = github_payload['repository']['html_url']
+        author_name = github_payload['sender']['login']
+        author_avatar_url = github_payload['sender']['avatar_url']
+        author_url = github_payload['sender']['html_url']
+
+        embed = DiscordEmbed(
+            title=f'{repository_name}',
+            url=branch_url,
+            color='9900ff'
+        )
+        embed.set_author(
+            name=author_name,
+            icon_url=author_avatar_url,
+            url=author_url
+        )
+
+        embed.add_embed_field(name=branch_name, value="```ansi\n🚨 \u001b[0;35mBranch deletada com sucesso!\n```", inline=False)
+
+    elif github_event == 'pull_request':
+        webhook_url = 'https://discord.com/api/webhooks/1196531363868848208/Hu2pY0EfJP7knLd1h824DOBvxOc_iSM4ffPMdSYvm5vzNrXlvRMbbjXTYIqggOEJg8b1'
+        
+        # Adicionar campo para a criação do branch
+        pull_number = github_payload['number']
+        pull_details = github_payload['pull_request']['title']
+        pull_url = github_payload['pull_request']['html_url']
+        pull_message = github_payload['pull_request']['body']
+
+        repository_name = github_payload['repository']['full_name']
+
+        reviewers = github_payload['pull_request']['requested_reviewers']
+        branch_url = github_payload['pull_request']['html_url']
+        author_name = github_payload['sender']['login']
+        author_avatar_url = github_payload['sender']['avatar_url']
+        author_url = github_payload['sender']['html_url']
+
+        embed = DiscordEmbed(
+            title=f'⚛️{repository_name}',
+            url=branch_url,
+            color='9900ff'
+        )
+        embed.set_author(
+            name=author_name,
+            icon_url=author_avatar_url,
+            url=author_url
+        )
+
+
+        if github_payload['action'] == 'opened':
+            embed.add_embed_field(name=f'Nova PR: {pull_details} - Nº{pull_number}', value=f"```ansi\n🔀 \u001b[0;35mPull Request criado com sucesso!\n```\n[`Acesse aqui!`]({pull_url})", inline=False)
+            if pull_message:
+                embed.add_embed_field(name='Mensagem', value=f"```\n{pull_message}\n```", inline=False)
+
+            reviewer_text = ''
+            for reviewer in reviewers:
+
+                reviewer_text += f'@{reviewer["login"]}\n'
+
+            embed.add_embed_field(name='Revisores solicitados', value=f"```\n{reviewer_text}\n```", inline=False)
+        elif github_payload['action'] == 'closed':
+            embed.add_embed_field(name=f'PR: {pull_details} - Nº{pull_number}', value=f"```ansi\n🚨 \u001b[0;35mPull Request fechado com sucesso!\n```\n[`Acesse aqui!`]({pull_url})", inline=False)
+    else:
+        return jsonify({'message': 'Evento não suportado!'}), 400
+    # Adicionar o timestamp ao embed
     embed.set_timestamp()
 
-    # Adicionar campos para as alterações
-    for tipo, arquivos in commit_changes.items():
-        if arquivos:
-
-            if tipo == 'Arquivos adicionados':
-                color = '32'
-            elif tipo == 'Arquivos alterados':
-                color = '33'
-            else:
-                color = '31'
-
-            arquivos_str = '\n'.join(arquivos)
-
-            valueText = f"```ansi\n\u001b[0;{color}m{arquivos_str}\n```"
-            embed.add_embed_field(name=tipo, value=valueText, inline=False)
-
-    embed.url = commit_url
-
-    # Enviar o embed para o canal no Discord
-    webhook_url = 'https://discord.com/api/webhooks/1204507570979475496/ox5XYN67s1bBfn1zUUYgYRGnC9UgFhVRPIFES52wTykAfryu0jmACzOVJ3z64Xkic9vT'
     webhook = DiscordWebhook(url=webhook_url)
-    webhook.add_embed(embed)
-    response = webhook.execute()
 
-    return jsonify({'message': 'Webhook recebido com sucesso!'}), 200
+    webhook.avatar_url = 'https://avatars1.githubusercontent.com/u/9919?s=280&v=4'
+
+    # Adicionar o embed ao webhook
+    webhook.add_embed(embed)
+
+    print(webhook.get_embeds())
+    # Enviar o webhook com todos os commits
+    response = webhook.execute(remove_embeds=False)
+
+    data_json = response
+
+    return jsonify({'message': f'Webhook recebido com sucesso!{data_json}'}), 200
 
 if __name__ == '__main__':
     app.run(debug=True)
