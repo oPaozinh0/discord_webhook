@@ -4,34 +4,42 @@ import requests
 
 app = Flask(__name__)
 
+jira_url = 'https://amplisoftware.atlassian.net/browse'
+
 @app.route('/github-webhook', methods=['POST'])
 def github_webhook():
     github_event = request.headers.get('X-GitHub-Event')
 
     github_payload = request.json
 
-    webhook_url = 'https://discord.com/api/webhooks/1196531971782868995/I3b2Zfzn_wW9W9TUfQVdJmKtaqb3FSfBrPRw7BzreOYMWwjZqaDV1-iUhzY_99AeuHt-'
+    webhook_url = 'https://discordapp.com/api/webhooks/1204507570979475496/ox5XYN67s1bBfn1zUUYgYRGnC9UgFhVRPIFES52wTykAfryu0jmACzOVJ3z64Xkic9vT'
 
 
     if github_event == 'ping':
         return jsonify({'message': 'Pong!'}), 200
-    
+
     elif github_event == 'push':
     # Criar o embed para o Discord
         # Extrair informações relevantes do payload do GitHub
         repository_name = github_payload['repository']['full_name']
-        print(repository_name)
         branch_name = github_payload['ref'].split('refs/heads/')[-1]
-        author_name = github_payload['head_commit']['author']['name']
+        # explodindo variaveis da branch com / e pegar a ultima parte
+        branch_card = branch_name.split('/')[-1].split('-')
+        # explodindo variaveis da branch com - para pegar a primeira e a segunda parte
+        branch_card = branch_card[0]+'-'+branch_card[1]
+        card_url = jira_url +'/'+ branch_card
+        author_api_url = github_payload['sender']['url']
+        author_data = requests.get(author_api_url).json()
+        author_name = author_data['name']
         author_user = github_payload['sender']['login']
         author_avatar_url = github_payload['sender']['avatar_url']
         author_url = github_payload['sender']['html_url']
         branch_url = github_payload['repository']['html_url'] + '/commits/' + branch_name
 
         embed = DiscordEmbed(
-            title=f'⬆️ PUSH:\n{branch_name}',
+            title=f'⬆️ {branch_name}',
             url=branch_url,
-            description=f'[{repository_name}]({github_payload["repository"]["html_url"]})',
+            description=f'[`Clique para abrir o card!`]({card_url})',
             color='9900ff'
         )
         embed.set_author(
@@ -83,8 +91,11 @@ def github_webhook():
 
             # Adicione cada campo dividido como um novo campo no embed
             for index, text in enumerate(divided_fields):
+                if index == 0:
+                    embed.add_embed_field(name=f"Commit ➡️ {commit_message}", value=f'[`{commit_id}`]({commit_url})\n```ansi\n{text}```', inline=False)
+                else:
                 # Adicione o campo ao embed
-                embed.add_embed_field(name=f"Commit ➡️ {commit_message} (Parte {index+1})", value=f'[`{commit_id}`]({commit_url})\n```ansi\n{text}```', inline=False)
+                    embed.add_embed_field(name=f"Commit ➡️ {commit_message} (Parte {index+1})", value=f'[`{commit_id}`]({commit_url})\n```ansi\n{text}```', inline=False)
 
 
     elif github_event == 'create':
@@ -92,6 +103,10 @@ def github_webhook():
         repository_name = github_payload['repository']['full_name']
         branch_name = github_payload['ref']
         branch_url = github_payload['repository']['html_url'] + '/tree/' + branch_name
+
+        branch_name = branch_name.split('refs/heads/')[-1].split('/')[-1].split('-')
+        branch_name = branch_name[0]+'-'+branch_name[1]
+        card_url = jira_url +'/'+ branch_name
 
         author_api_url = github_payload['sender']['url']
         author_data = requests.get(author_api_url).json()
@@ -112,9 +127,7 @@ def github_webhook():
         )
 
         embed.add_embed_field(name=branch_name, value="```ansi\n✅ \u001b[0;35mNova branch criada com sucesso!\n```", inline=False)
-
-        print(embed)
-        exit()
+        embed.add_embed_field(name='', value=f"[`Clique para abrir o card!`]({card_url})", inline=False)
 
     elif github_event == 'delete':
         # Adicionar campo para a criação do branch
@@ -139,8 +152,8 @@ def github_webhook():
         embed.add_embed_field(name=branch_name, value="```ansi\n🚨 \u001b[0;35mBranch deletada com sucesso!\n```", inline=False)
 
     elif github_event == 'pull_request':
-        webhook_url = 'https://discord.com/api/webhooks/1196531363868848208/Hu2pY0EfJP7knLd1h824DOBvxOc_iSM4ffPMdSYvm5vzNrXlvRMbbjXTYIqggOEJg8b1'
-        
+        webhook_url = 'https://discordapp.com/api/webhooks/1204507570979475496/ox5XYN67s1bBfn1zUUYgYRGnC9UgFhVRPIFES52wTykAfryu0jmACzOVJ3z64Xkic9vT'
+
         # Adicionar campo para a criação do branch
         pull_number = github_payload['number']
         pull_details = github_payload['pull_request']['title']
@@ -187,12 +200,10 @@ def github_webhook():
 
     webhook = DiscordWebhook(url=webhook_url)
 
-    webhook.avatar_url = 'https://avatars1.githubusercontent.com/u/9919?s=280&v=4'
 
     # Adicionar o embed ao webhook
     webhook.add_embed(embed)
 
-    print(webhook.get_embeds())
     # Enviar o webhook com todos os commits
     response = webhook.execute(remove_embeds=False)
 
