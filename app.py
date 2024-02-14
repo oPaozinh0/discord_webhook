@@ -12,8 +12,7 @@ def github_webhook():
 
     github_payload = request.json
 
-    webhook_url = 'https://discordapp.com/api/webhooks/1204507570979475496/ox5XYN67s1bBfn1zUUYgYRGnC9UgFhVRPIFES52wTykAfryu0jmACzOVJ3z64Xkic9vT'
-
+    webhook_url = 'https://discord.com/api/webhooks/1196531971782868995/I3b2Zfzn_wW9W9TUfQVdJmKtaqb3FSfBrPRw7BzreOYMWwjZqaDV1-iUhzY_99AeuHt-'
 
     if github_event == 'ping':
         return jsonify({'message': 'Pong!'}), 200
@@ -152,7 +151,7 @@ def github_webhook():
         embed.add_embed_field(name=branch_name, value="```ansi\n🚨 \u001b[0;35mBranch deletada com sucesso!\n```", inline=False)
 
     elif github_event == 'pull_request':
-        webhook_url = 'https://discordapp.com/api/webhooks/1204507570979475496/ox5XYN67s1bBfn1zUUYgYRGnC9UgFhVRPIFES52wTykAfryu0jmACzOVJ3z64Xkic9vT'
+        webhook_url = 'https://discord.com/api/webhooks/1196531363868848208/Hu2pY0EfJP7knLd1h824DOBvxOc_iSM4ffPMdSYvm5vzNrXlvRMbbjXTYIqggOEJg8b1'
 
         # Adicionar campo para a criação do branch
         pull_number = github_payload['number']
@@ -199,6 +198,7 @@ def github_webhook():
     embed.set_timestamp()
 
     webhook = DiscordWebhook(url=webhook_url)
+    webhook.avatar_url = 'https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/ca3c0184-a1bc-4cf1-8e61-2c0caa693056/dfod5oa-b33b2795-ef4e-4e09-8761-a48d3cbb3a78.png/v1/fit/w_512,h_512,q_70,strp/discord_avatar_512_vgtn8_by_mrbluetuxedo_dfod5oa-375w-2x.jpg?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7ImhlaWdodCI6Ijw9NTEyIiwicGF0aCI6IlwvZlwvY2EzYzAxODQtYTFiYy00Y2YxLThlNjEtMmMwY2FhNjkzMDU2XC9kZm9kNW9hLWIzM2IyNzk1LWVmNGUtNGUwOS04NzYxLWE0OGQzY2JiM2E3OC5wbmciLCJ3aWR0aCI6Ijw9NTEyIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmltYWdlLm9wZXJhdGlvbnMiXX0.UBnr85mLgr78iOoTpfLS9fHuTDdxpCP54kG6gchiBhw'
 
 
     # Adicionar o embed ao webhook
