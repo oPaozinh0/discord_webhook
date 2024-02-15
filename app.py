@@ -1,8 +1,20 @@
 from flask import Flask, request, jsonify
+import sentry_sdk
 from discord_webhook import DiscordWebhook, DiscordEmbed
 import requests
 
 app = Flask(__name__)
+
+sentry_sdk.init(
+    dsn="https://c241a7e3a3eba48d9f94edd4ab66de72@o4506746068140032.ingest.sentry.io/4506746068336640",
+    # Set traces_sample_rate to 1.0 to capture 100%
+    # of transactions for performance monitoring.
+    traces_sample_rate=1.0,
+    # Set profiles_sample_rate to 1.0 to profile 100%
+    # of sampled transactions.
+    # We recommend adjusting this value in production.
+    profiles_sample_rate=1.0,
+)
 
 jira_url = 'https://amplisoftware.atlassian.net/browse'
 
@@ -22,11 +34,14 @@ def github_webhook():
         # Extrair informações relevantes do payload do GitHub
         repository_name = github_payload['repository']['full_name']
         branch_name = github_payload['ref'].split('refs/heads/')[-1]
-        # explodindo variaveis da branch com / e pegar a ultima parte
-        branch_card = branch_name.split('/')[-1].split('-')
         # explodindo variaveis da branch com - para pegar a primeira e a segunda parte
-        branch_card = branch_card[0]+'-'+branch_card[1]
-        card_url = jira_url +'/'+ branch_card
+        branch_card = branch_name.split('/')[-1].split('-')
+        if len(branch_card) >= 2:
+            branch_card = branch_card[0]+'-'+branch_card[1]
+            card_url = jira_url +'/'+ branch_card
+        else:
+            branch_card = branch_card[0]
+            card_url = ''
         author_api_url = github_payload['sender']['url']
         author_data = requests.get(author_api_url).json()
         author_name = author_data['name']
@@ -103,9 +118,9 @@ def github_webhook():
         branch_name = github_payload['ref']
         branch_url = github_payload['repository']['html_url'] + '/tree/' + branch_name
 
-        branch_name = branch_name.split('refs/heads/')[-1].split('/')[-1].split('-')
-        branch_name = branch_name[0]+'-'+branch_name[1]
-        card_url = jira_url +'/'+ branch_name
+        branch_id = branch_name.split('refs/heads/')[-1].split('/')[-1].split('-')
+        branch_id = branch_id[0]+'-'+branch_name[1]
+        card_url = jira_url +'/'+ branch_id
 
         author_api_url = github_payload['sender']['url']
         author_data = requests.get(author_api_url).json()
@@ -178,7 +193,6 @@ def github_webhook():
             url=author_url
         )
 
-
         if github_payload['action'] == 'opened':
             embed.add_embed_field(name=f'Nova PR: {pull_details} - Nº{pull_number}', value=f"```ansi\n🔀 \u001b[0;35mPull Request criado com sucesso!\n```\n[`Acesse aqui!`]({pull_url})", inline=False)
             if pull_message:
@@ -190,14 +204,66 @@ def github_webhook():
                 reviewer_text += f'@{reviewer["login"]}\n'
 
             embed.add_embed_field(name='Revisores solicitados', value=f"```\n{reviewer_text}\n```", inline=False)
+
         elif github_payload['action'] == 'closed':
             embed.add_embed_field(name=f'PR: {pull_details} - Nº{pull_number}', value=f"```ansi\n🚨 \u001b[0;35mPull Request fechado com sucesso!\n```\n[`Acesse aqui!`]({pull_url})", inline=False)
+        else:
+            return jsonify({'message': 'Evento não suportado!'}), 400
+        
+    elif github_event == 'pull_request_review':
+        webhook_url = 'https://discord.com/api/webhooks/1196531363868848208/Hu2pY0EfJP7knLd1h824DOBvxOc_iSM4ffPMdSYvm5vzNrXlvRMbbjXTYIqggOEJg8b1'
+
+        pull_url = github_payload['pull_request']['html_url']
+        pull_number = github_payload['pull_request']['number']
+        pull_details = github_payload['pull_request']['title']
+        pull_message = github_payload['pull_request']['body']
+        repository_name = github_payload['repository']['full_name']
+
+        branch_name = github_payload['pull_request']['head']['ref']
+        branch_url = github_payload['repository']['html_url'] + '/tree/' + branch_name
+
+        author_url = github_payload['sender']['url']
+        author_data = requests.get(author_url).json()
+        author_name = author_data['name']
+        author_user = github_payload['sender']['login']
+        author_avatar_url = github_payload['sender']['avatar_url']
+
+        review_author = github_payload['review']['user']['login']
+        review_author_url = github_payload['review']['user']['url']
+        review_author_name = requests.get(review_author_url).json()['name']
+        review_state = github_payload['review']['state']
+        review_body = github_payload['review']['body']
+
+        embed = DiscordEmbed(
+            title=f'⚛️{repository_name}',
+            url=pull_url,
+            color='9900ff'
+        )
+        embed.set_author(
+            name=author_name,
+            icon_url=author_avatar_url,
+            url=author_url
+        )
+        if review_state == 'approved':
+            embed.add_embed_field(name=f'PR: {pull_details} - Nº{pull_number}', value=f"```ansi\n✅ \u001b[0;35mPR aprovada!\n```\n[`Acesse aqui!`]({pull_url})", inline=False)
+        elif review_state == 'changes_requested':
+            embed.add_embed_field(name=f'PR: {pull_details} - Nº{pull_number}', value=f"```ansi\n🚨 \u001b[0;35mAlterações solicitadas!\n```\n[`Acesse aqui!`]({pull_url})", inline=False)
+        elif review_state == 'commented':
+            embed.add_embed_field(name=f'PR: {pull_details} - Nº{pull_number}', value=f"```ansi\n💬 \u001b[0;35mComentário adicionado!\n```\n[`Acesse aqui!`]({pull_url})", inline=False)
+        elif review_state == 'dismissed':
+            embed.add_embed_field(name=f'PR: {pull_details} - Nº{pull_number}', value=f"```ansi\n🚫 \u001b[0;35mPR rejeitada!\n```\n[`Acesse aqui!`]({pull_url})", inline=False)
+        else:
+            return jsonify({'message': 'Evento não suportado!'}), 400
+        
+        # Quem fez a revisão e seu comentário sem set_author
+        embed.add_embed_field(name=f'Revisor: {review_author_name} - @{review_author}', value=f"```ansi\n{review_body}\n```", inline=False)
     else:
         return jsonify({'message': 'Evento não suportado!'}), 400
     # Adicionar o timestamp ao embed
     embed.set_timestamp()
 
     webhook = DiscordWebhook(url=webhook_url)
+    webhook.username = 'Migradeiro Bot'
     webhook.avatar_url = 'https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/ca3c0184-a1bc-4cf1-8e61-2c0caa693056/dfod5oa-b33b2795-ef4e-4e09-8761-a48d3cbb3a78.png/v1/fit/w_512,h_512,q_70,strp/discord_avatar_512_vgtn8_by_mrbluetuxedo_dfod5oa-375w-2x.jpg?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7ImhlaWdodCI6Ijw9NTEyIiwicGF0aCI6IlwvZlwvY2EzYzAxODQtYTFiYy00Y2YxLThlNjEtMmMwY2FhNjkzMDU2XC9kZm9kNW9hLWIzM2IyNzk1LWVmNGUtNGUwOS04NzYxLWE0OGQzY2JiM2E3OC5wbmciLCJ3aWR0aCI6Ijw9NTEyIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmltYWdlLm9wZXJhdGlvbnMiXX0.UBnr85mLgr78iOoTpfLS9fHuTDdxpCP54kG6gchiBhw'
 
 
